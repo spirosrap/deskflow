@@ -12,6 +12,7 @@
 #include "base/Stopwatch.h"
 #include "platform/XWindowsClipboardBMPConverter.h"
 #include "platform/XWindowsClipboardHTMLConverter.h"
+#include "platform/XWindowsClipboardImageConverter.h"
 #include "platform/XWindowsClipboardTextConverter.h"
 #include "platform/XWindowsClipboardUCS2Converter.h"
 #include "platform/XWindowsClipboardUTF8Converter.h"
@@ -20,12 +21,40 @@
 #include <X11/Xatom.h>
 #include <algorithm>
 #include <cstring>
+#include <QString>
+#include <utility>
 
 #if HAVE_FORMAT
 #include <format>
 #endif
 
 #include <vector>
+
+namespace {
+
+QString trimText(QString text)
+{
+  text = text.trimmed();
+  if ((text.startsWith(QLatin1Char('"')) && text.endsWith(QLatin1Char('"'))) ||
+      (text.startsWith(QLatin1Char('\'')) && text.endsWith(QLatin1Char('\'')))) {
+    text = text.mid(1, text.size() - 2).trimmed();
+  }
+  return text;
+}
+
+bool looksLikeScreenshotPlaceholder(const std::string &text)
+{
+  auto lower = QString::fromUtf8(text.data(), static_cast<int>(text.size())).toLower();
+  lower = trimText(std::move(lower));
+  if (lower.isEmpty()) {
+    return false;
+  }
+
+  return lower.startsWith(QStringLiteral("screenshot")) || lower.contains(QStringLiteral("screenshot from ")) ||
+         (lower.contains(QStringLiteral("file://")) && lower.contains(QStringLiteral("screenshot")));
+}
+
+} // namespace
 
 //
 // XWindowsClipboard
@@ -60,7 +89,12 @@ XWindowsClipboard::XWindowsClipboard(Display *display, Window window, ClipboardI
   // add converters, most desired first
   m_converters.push_back(new XWindowsClipboardHTMLConverter(m_display, "text/html"));
   m_converters.push_back(new XWindowsClipboardHTMLConverter(m_display, "application/x-moz-nativehtml"));
+  m_converters.push_back(new XWindowsClipboardImageConverter(m_display, "image/png", "PNG"));
+  m_converters.push_back(new XWindowsClipboardImageConverter(m_display, "image/tiff", "TIFF"));
   m_converters.push_back(new XWindowsClipboardBMPConverter(m_display));
+  m_converters.push_back(new XWindowsClipboardBMPConverter(m_display, "image/x-bmp"));
+  m_converters.push_back(new XWindowsClipboardBMPConverter(m_display, "image/x-MS-bmp"));
+  m_converters.push_back(new XWindowsClipboardBMPConverter(m_display, "image/x-win-bitmap"));
   m_converters.push_back(new XWindowsClipboardUTF8Converter(m_display, "text/plain;charset=UTF-8", true));
   m_converters.push_back(new XWindowsClipboardUTF8Converter(m_display, "text/plain;charset=utf-8", true));
   m_converters.push_back(new XWindowsClipboardUTF8Converter(m_display, "UTF8_STRING"));
@@ -337,6 +371,14 @@ bool XWindowsClipboard::has(Format format) const
   assert(m_open);
 
   fillCache();
+  const bool suppressPlaceholderText =
+      m_added[static_cast<int>(Format::Text)] && looksLikeScreenshotPlaceholder(m_data[static_cast<int>(Format::Text)]);
+  if ((format == Format::Text || format == Format::HTML) && suppressPlaceholderText) {
+    if (format == Format::Text) {
+      LOG_INFO("suppressing screenshot placeholder text on X11 clipboard");
+    }
+    return false;
+  }
   return m_added[static_cast<int>(format)];
 }
 
@@ -345,6 +387,10 @@ std::string XWindowsClipboard::get(Format format) const
   assert(m_open);
 
   fillCache();
+  if ((format == Format::Text || format == Format::HTML) && m_added[static_cast<int>(Format::Text)] &&
+      looksLikeScreenshotPlaceholder(m_data[static_cast<int>(Format::Text)])) {
+    return {};
+  }
   return m_data[static_cast<int>(format)];
 }
 
@@ -500,8 +546,14 @@ void XWindowsClipboard::icccmFillCache()
       continue;
     }
 
-    // add to clipboard and note we've done it
-    m_data[formatID] = converter->toIClipboard(targetData);
+    // add to clipboard and note we've done it. if conversion fails (empty
+    // output from non-empty input), keep trying lower-priority converters.
+    auto converted = converter->toIClipboard(targetData);
+    if (converted.empty() && !targetData.empty()) {
+      LOG_DEBUG1("  converter produced no data for target %s", XWindowsUtil::atomToString(m_display, target).c_str());
+      continue;
+    }
+    m_data[formatID] = std::move(converted);
     m_added[formatID] = true;
     LOG(
         (CLOG_DEBUG "added format %d for target %s (%u %s)", formatID,
@@ -725,8 +777,14 @@ void XWindowsClipboard::motifFillCache()
       continue;
     }
 
-    // add to clipboard and note we've done it
-    m_data[formatID] = converter->toIClipboard(targetData);
+    // add to clipboard and note we've done it. if conversion fails (empty
+    // output from non-empty input), keep trying lower-priority converters.
+    auto converted = converter->toIClipboard(targetData);
+    if (converted.empty() && !targetData.empty()) {
+      LOG_DEBUG1("  converter produced no data for target %s", XWindowsUtil::atomToString(m_display, target).c_str());
+      continue;
+    }
+    m_data[formatID] = std::move(converted);
     m_added[formatID] = true;
     LOG_DEBUG("added format %d for target %s", format, XWindowsUtil::atomToString(m_display, target).c_str());
   }

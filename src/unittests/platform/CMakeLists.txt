@@ -1,6 +1,16 @@
 # SPDX-FileCopyrightText: (C) 2025 Deskflow Developers
 # SPDX-License-Identifier: MIT
 
+if(NOT WIN32)
+  create_test(
+    NAME ClipboardImageConverterTests
+    DEPENDS platform
+    LIBS base arch
+    SOURCE ClipboardImageConverterTests.cpp
+    WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/src/lib/platform"
+  )
+endif()
+
 if (WIN32)
   create_test(
     NAME MSWindowsClipboardTests
