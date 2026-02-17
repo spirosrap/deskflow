@@ -13,6 +13,8 @@ endif()
 
 if(WIN32)
   set(PLATFORM_SOURCES
+    ClipboardImageConverter.cpp
+    ClipboardImageConverter.h
     IMSWindowsClipboardFacade.h
     MSWindowsClipboard.cpp
     MSWindowsClipboard.h
@@ -54,6 +56,8 @@ elseif(APPLE)
     IOSXKeyResource.cpp
     IOSXKeyResource.h
     OSXAutoTypes.h
+    ClipboardImageConverter.cpp
+    ClipboardImageConverter.h
     OSXClipboard.cpp
     OSXClipboard.h
     OSXClipboardAnyBitmapConverter.cpp
@@ -62,6 +66,8 @@ elseif(APPLE)
     OSXClipboardAnyTextConverter.h
     OSXClipboardBMPConverter.cpp
     OSXClipboardBMPConverter.h
+    OSXClipboardImageConverter.cpp
+    OSXClipboardImageConverter.h
     OSXClipboardHTMLConverter.cpp
     OSXClipboardHTMLConverter.h
     OSXClipboardTextConverter.cpp
@@ -94,6 +100,8 @@ elseif(APPLE)
   )
 elseif(UNIX)
   set(PLATFORM_SOURCES
+    ClipboardImageConverter.cpp
+    ClipboardImageConverter.h
     XDGPortalRegistry.h
     XDGPowerManager.cpp
     XDGPowerManager.h
@@ -109,6 +117,8 @@ elseif(UNIX)
       XWindowsClipboardAnyBitmapConverter.h
       XWindowsClipboardBMPConverter.cpp
       XWindowsClipboardBMPConverter.h
+      XWindowsClipboardImageConverter.cpp
+      XWindowsClipboardImageConverter.h
       XWindowsClipboardHTMLConverter.cpp
       XWindowsClipboardHTMLConverter.h
       XWindowsClipboardTextConverter.cpp
@@ -161,6 +171,10 @@ add_library(platform STATIC ${PLATFORM_SOURCES})
 
 target_link_libraries(platform client ${libs})
 
+if(WIN32)
+  target_link_libraries(platform Qt6::Gui)
+endif()
+
 if(UNIX)
   target_link_libraries(
     platform
@@ -172,7 +186,11 @@ if(UNIX)
 
   if(APPLE)
     find_library(COCOA_LIBRARY Cocoa)
-    target_link_libraries(platform ${COCOA_LIBRARY})
+    target_link_libraries(
+      platform
+      ${COCOA_LIBRARY}
+      Qt6::Gui
+    )
   else()
     if(${LIBXKBCOMMON_VERSION} VERSION_GREATER_EQUAL "1.10")
       target_compile_definitions(platform PRIVATE HAVE_XKB_KEYMAP_MOD_GET_MASK=1)
@@ -181,6 +199,7 @@ if(UNIX)
     target_include_directories(platform PUBLIC ${LIBEI_INCLUDE_DIRS} ${LIBPORTAL_INCLUDE_DIRS})
     target_link_libraries(
       platform
+      Qt6::Gui
       Qt6::DBus
       ${LIBXKBCOMMON_LINK_LIBRARIES}
       ${GLIB2_LINK_LIBRARIES} ${LIBM_LIBRARIES}
