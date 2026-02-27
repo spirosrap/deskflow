@@ -713,11 +713,20 @@ void MainWindow::setTrayIcon()
   static const auto fallbackPath = QStringLiteral(":/icons/%1-%2/apps/64/%3");
 
   QString themeIcon = kRevFqdnName;
-  if (!Settings::value(Settings::Gui::SymbolicTrayIcon).toBool()) {
-    if (deskflow::platform::isMac())
-      m_trayIcon->setIcon(QIcon::fromTheme(themeIcon));
-    else
-      m_trayIcon->setIcon(QIcon(fallbackPath.arg(kAppId, QStringLiteral("dark"), themeIcon)));
+  const bool symbolicTrayIcon = Settings::value(Settings::Gui::SymbolicTrayIcon).toBool();
+
+  if (deskflow::platform::isMac()) {
+    if (symbolicTrayIcon)
+      themeIcon.append(QStringLiteral("-symbolic"));
+
+    // Theme lookup on some custom macOS builds can resolve to a transparent
+    // status icon; use bundled resources directly.
+    m_trayIcon->setIcon(QIcon(fallbackPath.arg(kAppId, iconMode(), themeIcon)));
+    return;
+  }
+
+  if (!symbolicTrayIcon) {
+    m_trayIcon->setIcon(QIcon(fallbackPath.arg(kAppId, QStringLiteral("dark"), themeIcon)));
     return;
   }
 
