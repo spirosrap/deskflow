@@ -32,6 +32,7 @@
 #include "widgets/StatusBar.h"
 
 #include <QCloseEvent>
+#include <QCoreApplication>
 #include <QDesktopServices>
 #include <QFileDialog>
 #include <QLocalServer>
@@ -716,11 +717,16 @@ void MainWindow::setTrayIcon()
   const bool symbolicTrayIcon = Settings::value(Settings::Gui::SymbolicTrayIcon).toBool();
 
   if (deskflow::platform::isMac()) {
+    const auto appIconPath =
+        QCoreApplication::applicationDirPath() + QStringLiteral("/../Resources/Deskflow.icns");
+    auto appIcon = QIcon(appIconPath);
+    if (!appIcon.isNull()) {
+      m_trayIcon->setIcon(appIcon);
+      return;
+    }
+
     if (symbolicTrayIcon)
       themeIcon.append(QStringLiteral("-symbolic"));
-
-    // Theme lookup on some custom macOS builds can resolve to a transparent
-    // status icon; use bundled resources directly.
     m_trayIcon->setIcon(QIcon(fallbackPath.arg(kAppId, iconMode(), themeIcon)));
     return;
   }
