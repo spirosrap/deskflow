@@ -717,6 +717,17 @@ void MainWindow::setTrayIcon()
   const bool symbolicTrayIcon = Settings::value(Settings::Gui::SymbolicTrayIcon).toBool();
 
   if (deskflow::platform::isMac()) {
+    // Keep the symbolic toggle functional on macOS while avoiding
+    // transparent colorful icons on custom builds.
+    if (symbolicTrayIcon) {
+      auto icon = QIcon(fallbackPath.arg(kAppId, iconMode(), themeIcon + QStringLiteral("-symbolic")));
+      if (!icon.isNull()) {
+        icon.setIsMask(true);
+        m_trayIcon->setIcon(icon);
+        return;
+      }
+    }
+
     const auto appIconPath =
         QCoreApplication::applicationDirPath() + QStringLiteral("/../Resources/Deskflow.icns");
     auto appIcon = QIcon(appIconPath);
@@ -725,9 +736,7 @@ void MainWindow::setTrayIcon()
       return;
     }
 
-    if (symbolicTrayIcon)
-      themeIcon.append(QStringLiteral("-symbolic"));
-    m_trayIcon->setIcon(QIcon(fallbackPath.arg(kAppId, iconMode(), themeIcon)));
+    m_trayIcon->setIcon(QIcon(fallbackPath.arg(kAppId, QStringLiteral("dark"), themeIcon)));
     return;
   }
 
